@@ -1,1 +1,0 @@
-Hanya bot WhatsApp pribadi bukan untuk publik
