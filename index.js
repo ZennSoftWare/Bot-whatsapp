@@ -4,7 +4,8 @@ import readline from "readline";
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  Browsers
 } from "@whiskeysockets/baileys";
 
 const prefix = ".";
@@ -18,7 +19,7 @@ function tanyaNomor() {
       output: process.stdout
     });
     rl.question(
-      "\n┌─────────────────────────────┐\n│   🤖 XZEERH BOT - SETUP AWAL  │\n└─────────────────────────────┘\n\n📱 Masukkan nomor WhatsApp kamu\n   Format: 628xxxxxxxxxx (tanpa + atau spasi)\n\n➤ Nomor: ",
+      "\n┌─────────────────────────────┐\n│   🤖 XZEERH BOT - SETUP AWAL  │\n└─────────────────────────────┘\n\n📱 Masukkan nomor WhatsApp kamu\n   Format: 628xxxxxxxxxx (tanpa + atau spasi)\n   Contoh UK: 447351572994\n\n➤ Nomor: ",
       (nomor) => {
         rl.close();
         resolve(nomor.trim());
@@ -53,7 +54,6 @@ async function startBot() {
 
   const sudahLogin = state.creds.registered;
 
-  // Kalau belum login, minta nomor dulu
   let nomorOwner = "";
   if (!sudahLogin) {
     nomorOwner = await tanyaNomor();
@@ -61,6 +61,8 @@ async function startBot() {
       console.log("❌ Nomor tidak boleh kosong!");
       process.exit(1);
     }
+    // Bersihkan karakter aneh
+    nomorOwner = nomorOwner.replace(/[^0-9]/g, "");
     console.log(`\n🔄 Menghubungkan dengan nomor: ${nomorOwner}...\n`);
   }
 
@@ -69,7 +71,7 @@ async function startBot() {
     auth: state,
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
-    browser: ["xzeerhBot", "Chrome", "1.0.0"],
+    browser: Browsers.ubuntu("Chrome"), // FIX: format browser yang benar untuk pairing code
     markOnlineOnConnect: false
   });
 
@@ -78,11 +80,17 @@ async function startBot() {
   let pairingDone = false;
 
   // ==================== KONEKSI ====================
-  sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect, isNewLogin }) => {
 
-    if (connection === "connecting" && !sudahLogin && !pairingDone) {
+    // FIX: request pairing code setelah socket benar2 siap, bukan saat connecting
+    if (connection === "open" && !sudahLogin && !pairingDone) {
+      // Kalau open tapi belum punya pairing = belum pernah login
+    }
+
+    if (!sock.authState.creds.registered && !pairingDone && nomorOwner) {
       pairingDone = true;
-      await new Promise(r => setTimeout(r, 3000));
+      // Tunggu socket stabil dulu
+      await new Promise(r => setTimeout(r, 2000));
       try {
         const code = await sock.requestPairingCode(nomorOwner);
         console.log("┌─────────────────────────────┐");
@@ -95,7 +103,6 @@ async function startBot() {
         console.log("   → Tautkan dengan nomor telepon → Masukkan kode\n");
       } catch (e) {
         console.log("❌ Gagal mendapatkan pairing code: " + e.message);
-        console.log("   Pastikan nomor benar dan coba lagi.");
         process.exit(1);
       }
     }
@@ -107,7 +114,7 @@ async function startBot() {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
-        console.log("❌ Bot logout! Hapus folder session lalu jalankan ulang.");
+        console.log("❌ Bot logout! Menghapus session...");
         fs.rmSync("./session", { recursive: true, force: true });
         process.exit(0);
       } else {
