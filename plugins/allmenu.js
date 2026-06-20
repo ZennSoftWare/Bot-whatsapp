@@ -1,44 +1,52 @@
 export default {
   command: ['allmenu', 'menu'],
   category: 'main',
-  description: 'Menampilkan semua menu',
   owner: true,
 
   async execute({ m }) {
+    await m.reply(
+`╭───〔 🤖 XZEERH BOT 〕───⬣
 
-    m.reply(
-`╭───〔 🤖 XZEERH DEV MENU 〕───⬣
+👋 Halo Owner!
+Berikut daftar perintah yang tersedia:
 
-👑 OWNER MENU
-⭔ .ping
-⭔ .allmenu
+━━━━━━━━━━━━━━
+🏓 *MAIN MENU*
+◇ .ping
+◇ .statusbot
+◇ .onlinebot
+◇ .offlinebot
 
-👥 GROUP MENU
-⭔ .open
-⭔ .close
-⭔ .hidetag
-⭔ .tagall
+━━━━━━━━━━━━━━
+👥 *GROUP MENU*
+◇ .tagall
+◇ .hidetag
+◇ .kick @user
+◇ .open
+◇ .close
 
-👋 WELCOME & GOODBYE
-⭔ .setwelcome
-⭔ .setout
+━━━━━━━━━━━━━━
+🛡️ *SECURITY MENU*
+◇ .antikudeta on/off
+◇ .antilink on/off
+◇ .addkebal @user
+◇ .delkebal @user
+◇ .listkebal
+◇ .cekkebal @user
 
-🛡️ SECURITY MENU
-⭔ .antikudeta
-⭔ .addkebal
-⭔ .delkebal
-⭔ .listkebal
-⭔ .cekkebal
+━━━━━━━━━━━━━━
+👋 *WELCOME & GOODBYE*
+◇ .setwelcome [pesan]
+◇ .setout [pesan]
 
-📊 BOT INFO
-⭔ Mode : Self
-⭔ Status : Online
-⭔ Version : 1.0
+━━━━━━━━━━━━━━
+📊 *BOT INFO*
+◇ Mode   : Self
+◇ Status : Online
+◇ Version : 2.0
 
 ╰────────────⬣
-
 © XZEERH DEV`
     );
-
   }
 };
