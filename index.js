@@ -18,7 +18,7 @@ function tanyaNomor() {
       output: process.stdout
     });
     rl.question(
-      "\n┌─────────────────────────────┐\n│   🤖 ZENN BOT - SETUP AWAL  │\n└─────────────────────────────┘\n\n📱 Masukkan nomor WhatsApp kamu\n   Format: 628xxxxxxxxxx (tanpa + atau spasi)\n\n➤ Nomor: ",
+      "\n┌─────────────────────────────┐\n│   🤖 XZEERH BOT - SETUP AWAL  │\n└─────────────────────────────┘\n\n📱 Masukkan nomor WhatsApp kamu\n   Format: 628xxxxxxxxxx (tanpa + atau spasi)\n\n➤ Nomor: ",
       (nomor) => {
         rl.close();
         resolve(nomor.trim());
