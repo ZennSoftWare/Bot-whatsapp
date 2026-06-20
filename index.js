@@ -39,7 +39,7 @@ async function startBot() {
     auth: state,
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
-    browser: ["ZennBot", "Chrome", "1.0.0"],
+    browser: ["XzeerhBot", "Chrome", "1.0.0"],
     markOnlineOnConnect: false
   });
 
