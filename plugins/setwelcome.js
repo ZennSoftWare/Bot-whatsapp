@@ -1,22 +1,22 @@
 export default {
-  command: ['setout'],
+  command: ['setwelcome'],
   category: 'group',
   owner: true,
   group: true,
 
   async execute({ m, args, db }) {
-    if (!args.length) return m.reply('Mana pesannya woi 😹\n\nContoh: .setout Selamat tinggal @user!');
+    if (!args.length) return m.reply('Mana pesannya woi 😹\n\nContoh: .setwelcome Selamat datang @user!');
 
-    if (!db.out) db.out = {};
+    if (!db.welcome) db.welcome = {};
     const text = args.join(' ');
-    db.out[m.chat] = text;
+    db.welcome[m.chat] = text;
 
-    await m.reply(`✅ Pesan goodbye berhasil disimpan!\n\n"${text}"\n\nGunakan @user untuk mention anggota yang keluar.`);
+    await m.reply(`✅ Pesan welcome berhasil disimpan!\n\n"${text}"\n\nGunakan @user untuk mention anggota baru.`);
   },
 
   async onParticipantsUpdate({ sock, id, participants, action, db }) {
-    if (action !== 'remove') return;
-    const text = db.out?.[id];
+    if (action !== 'add') return;
+    const text = db.welcome?.[id];
     if (!text) return;
 
     for (const user of participants) {
@@ -32,7 +32,7 @@ export default {
       await sock.sendMessage(id, {
         image: { url: pp },
         caption:
-`╭───〔 👋 GOODBYE 〕───⬣
+`╭───〔 👋 WELCOME 〕───⬣
 
 ${message}
 
