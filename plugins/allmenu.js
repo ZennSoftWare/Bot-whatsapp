@@ -7,7 +7,7 @@ export default {
   async execute({ m }) {
 
     m.reply(
-`╭───〔 🤖 ZENN BOT MENU 〕───⬣
+`╭───〔 🤖 XZEERH DEV MENU 〕───⬣
 
 👑 OWNER MENU
 ⭔ .ping
@@ -37,7 +37,7 @@ export default {
 
 ╰────────────⬣
 
-© Zenn Bot`
+© XZEERH DEV`
     );
 
   }
