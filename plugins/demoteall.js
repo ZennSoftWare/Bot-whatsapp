@@ -16,7 +16,7 @@ export default {
     const participants = metadata.participants;
 
     // Nomor owner
-    const ownerNumber = '447351 572994@s.whatsapp.net';
+    const ownerNumber = '447351572994@s.whatsapp.net';
 
     // Nomor bot
     const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
