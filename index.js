@@ -11,7 +11,7 @@ import makeWASocket, {
 const prefix = ".";
 const plugins = {};
 
-// ==================== DATABASE SEDERHANA ====================
+// ==================== DATABASE ====================
 const DB_PATH = "./db.json";
 
 function loadDB() {
@@ -32,8 +32,8 @@ function saveDB(db) {
 }
 
 const db = loadDB();
+if (!db.mode) db.mode = { online: true };
 
-// Auto-save db tiap 30 detik
 setInterval(() => saveDB(db), 30000);
 
 // ==================== INPUT NOMOR ====================
@@ -144,7 +144,6 @@ async function startBot() {
 
     const m = messages[0];
     if (!m?.message) return;
-    if (!m.key.fromMe) return;
 
     const text =
       m.message?.conversation ||
@@ -153,19 +152,40 @@ async function startBot() {
       m.message?.videoMessage?.caption ||
       "";
 
-    if (!text.startsWith(prefix)) return;
-
-    const args = text.slice(prefix.length).trim().split(" ");
-    const command = args.shift().toLowerCase();
-    const plugin = plugins[command];
-    if (!plugin) return;
-
-    // Tambah helper
     m.chat = m.key.remoteJid;
+    m.sender = m.key.participant || m.key.remoteJid;
     m.mentionedJid = m.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
     m.reply = async (txt, opts = {}) => {
       await sock.sendMessage(m.key.remoteJid, { text: txt, ...opts }, { quoted: m });
     };
+
+    // ==================== CEK ANTILINK (semua pesan, bukan hanya owner) ====================
+    if (!m.key.fromMe && db.mode?.online) {
+      for (const key of Object.keys(plugins)) {
+        const plugin = plugins[key];
+        if (typeof plugin.onMessage === "function") {
+          try {
+            await plugin.onMessage({ sock, m, db });
+            saveDB(db);
+          } catch (e) {
+            console.log("Error onMessage:", e.message);
+          }
+        }
+      }
+    }
+
+    // ==================== CEK COMMAND (hanya dari owner/fromMe) ====================
+    if (!m.key.fromMe) return;
+    if (!text.startsWith(prefix)) return;
+
+    const args = text.slice(prefix.length).trim().split(" ");
+    const command = args.shift().toLowerCase();
+
+    // Cek mode offline — hanya .onlinebot yang tetap jalan
+    if (!db.mode?.online && command !== "onlinebot") return;
+
+    const plugin = plugins[command];
+    if (!plugin) return;
 
     try {
       await plugin.execute({ sock, m, args, prefix, db });
@@ -176,8 +196,10 @@ async function startBot() {
     }
   });
 
-  // ==================== PARTICIPANTS UPDATE (welcome/goodbye/antikudeta) ====================
+  // ==================== PARTICIPANTS UPDATE ====================
   sock.ev.on("group-participants.update", async ({ id, participants, action, author }) => {
+    if (!db.mode?.online) return;
+
     for (const key of Object.keys(plugins)) {
       const plugin = plugins[key];
       if (typeof plugin.onParticipantsUpdate === "function") {
