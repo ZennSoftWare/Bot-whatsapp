@@ -6,7 +6,6 @@ export default {
 
   async execute({ m, args, db }) {
     if (!db.antikudeta) db.antikudeta = {};
-
     const groupId = m.key.remoteJid;
 
     if (!args[0]) {
@@ -21,54 +20,56 @@ Contoh:
     }
 
     const arg = args[0].toLowerCase();
-
     if (arg === 'on') {
       db.antikudeta[groupId] = true;
       return m.reply('☠️ Anti kudeta berhasil diaktifkan di grup ini.');
     }
-
     if (arg === 'off') {
       db.antikudeta[groupId] = false;
       return m.reply('☠️ Anti kudeta berhasil dimatikan di grup ini.');
     }
-
-    return m.reply('Argumen tidak valid. Gunakan: .antikudeta on / .antikudeta off');
   },
 
   async onParticipantsUpdate({ sock, id, participants, action, author, db }) {
-    // Cek apakah antikudeta aktif di grup ini
     if (!db.antikudeta?.[id]) return;
     if (!author) return;
     if (action !== 'demote' && action !== 'remove') return;
 
-    // Normalize ID — hapus ":xx" dari format Baileys
-    const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+    // Normalize: ambil angka saja sebelum @ 
+    const getNumber = (jid) => jid?.split('@')[0].split(':')[0];
 
-    const botNumber = normalize(sock.user.id);
-    const pelakuNum = normalize(author);
+    const botNumber = getNumber(sock.user.id);
+    const pelakuNumber = getNumber(author);
 
-    // Skip kalau pelakunya bot sendiri — cegah bot demote diri sendiri
-    if (pelakuNum === botNumber) return;
+    // Skip kalau pelakunya bot sendiri
+    if (pelakuNumber === botNumber) return;
 
-    // Cek apakah pelaku ada di daftar kebal grup ini
+    // Cek pelaku ada di daftar kebal
     const daftarKebal = db.kebal?.[id] || [];
-    const pelakuKebal = daftarKebal.some(jid => normalize(jid) === pelakuNum);
+    const pelakuKebal = daftarKebal.some(jid => getNumber(jid) === pelakuNumber);
     if (pelakuKebal) return;
 
     try {
-      // Ambil metadata terbaru untuk cek status bot dan pelaku
       const metadata = await sock.groupMetadata(id);
 
-      // Cek bot masih ada di grup dan masih admin
-      const botData = metadata.participants.find(p => normalize(p.id) === botNumber);
-      if (!botData) return;
-      if (!botData.admin) return;
+      // Cari bot di participants pakai perbandingan NUMBER saja (bukan full JID)
+      const botData = metadata.participants.find(p => getNumber(p.id) === botNumber);
+      const pelakuData = metadata.participants.find(p => getNumber(p.id) === pelakuNumber);
 
-      // Cek pelaku masih ada di grup
-      const pelakuData = metadata.participants.find(p => normalize(p.id) === pelakuNum);
-      if (!pelakuData) return;
+      console.log("🛡️ botData:", JSON.stringify(botData));
+      console.log("🛡️ pelakuData:", JSON.stringify(pelakuData));
 
-      // Demote pelaku kudeta
+      if (!botData) {
+        return await sock.sendMessage(id, { text: '⚠️ Bot tidak ditemukan di participants grup!' });
+      }
+
+      if (!botData.admin) {
+        return await sock.sendMessage(id, { text: '⚠️ Bot belum jadi admin, jadikan terlebih dahulu woi 😹' });
+      }
+
+      if (!pelakuData) return; // pelaku sudah tidak di grup
+
+      // Demote pelaku
       await sock.groupParticipantsUpdate(id, [author], 'demote');
 
       await sock.sendMessage(id, {
@@ -80,13 +81,14 @@ Mau ambil alih grup?
 
 Nyoli aja jangan ambil grup gitu 😹
 
-🚫 Pelaku : @${pelakuNum.split('@')[0]}
+🚫 Pelaku : @${pelakuNumber}
 🛡️ Jabatan berhasil dicabut.`,
         mentions: [author]
       });
 
     } catch (e) {
       console.log('antikudeta error:', e.message);
+      await sock.sendMessage(id, { text: '❌ Antikudeta error: ' + e.message });
     }
   }
 };
