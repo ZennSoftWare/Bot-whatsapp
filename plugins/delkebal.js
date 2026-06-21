@@ -5,15 +5,28 @@ export default {
   group: true,
 
   async execute({ m, db }) {
-    const user = m.mentionedJid?.[0];
-    if (!user) return m.reply('Tag orang yang ingin dicabut kekebalannya 😹');
+    const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+
+    const user = m.mentionedJid?.[0] ||
+      m.message?.extendedTextMessage?.contextInfo?.participant ||
+      null;
+
+    if (!user) return m.reply('Tag atau balas pesan orang yang ingin dicabut kekebalannya!\n\nContoh: .delkebal @user');
 
     if (!db.kebal) db.kebal = {};
     if (!db.kebal[m.chat]) db.kebal[m.chat] = [];
 
-    if (!db.kebal[m.chat].includes(user)) return m.reply('Dia tidak ada dalam daftar kebal 🗿');
+    const userNum = normalize(user);
+    const adaDiKebal = db.kebal[m.chat].some(jid => normalize(jid) === userNum);
+    if (!adaDiKebal) return m.reply('Dia tidak ada dalam daftar kebal 🗿');
 
-    db.kebal[m.chat] = db.kebal[m.chat].filter(jid => jid !== user);
-    await m.reply(`🛡️ Kekebalan berhasil dicabut!\n\n@${user.split('@')[0]} tidak lagi kebal 😹`, { mentions: [user] });
+    db.kebal[m.chat] = db.kebal[m.chat].filter(jid => normalize(jid) !== userNum);
+    await m.reply(
+`🛡️ Kekebalan berhasil dicabut!
+
+@${userNum.split('@')[0]} tidak lagi kebal.
+Bot akan menindak dia jika melakukan kudeta.`,
+      { mentions: [user] }
+    );
   }
 };
