@@ -32,39 +32,36 @@ Contoh:
     if (!db.antikudeta?.[id]) return;
     if (!author) return;
 
-    // Normalize ID hapus ":xx"
     const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
-
     const botNumber = normalize(sock.user.id);
     const pelakuNum = normalize(author);
 
-    // Skip kalau pelakunya bot sendiri — mencegah bot demote diri sendiri
+    // Skip kalau pelakunya bot sendiri
     if (pelakuNum === botNumber) return;
 
-    // Cek apakah pelaku ada di daftar kebal grup ini
-    const daftarKebal = db.kebal?.[id] || [];
-    const pelakuKebal = daftarKebal.some(jid => normalize(jid) === pelakuNum);
-    if (pelakuKebal) return; // pelaku kebal, dianggap tindakan sah bukan kudeta
+    if (action !== 'demote' && action !== 'remove') return;
 
-    if (action === 'demote' || action === 'remove') {
-      try {
-        // Ambil metadata terbaru
-        const metadata = await sock.groupMetadata(id);
+    try {
+      const metadata = await sock.groupMetadata(id);
 
-        // Cek bot masih admin
-        const botData = metadata.participants.find(p => normalize(p.id) === botNumber);
-        if (!botData?.admin) return; // bot bukan admin, diam saja
+      // Cek bot masih admin
+      const botData = metadata.participants.find(p => normalize(p.id) === botNumber);
+      if (!botData?.admin) return;
 
-        // Cek pelaku masih di grup dan masih admin
-        const pelakuData = metadata.participants.find(p => normalize(p.id) === pelakuNum);
-        if (!pelakuData) return; // pelaku sudah tidak di grup
-        if (!pelakuData.admin) return; // pelaku sudah bukan admin
+      // Cek pelaku masih di grup
+      const pelakuData = metadata.participants.find(p => normalize(p.id) === pelakuNum);
+      if (!pelakuData) return;
 
-        // Demote pelaku kudeta
-        await sock.groupParticipantsUpdate(id, [author], 'demote');
+      // Cek apakah pelaku ada di daftar kebal — kalau kebal, skip
+      const daftarKebal = db.kebal?.[id] || [];
+      const pelakuKebal = daftarKebal.some(jid => normalize(jid) === pelakuNum);
+      if (pelakuKebal) return;
 
-        await sock.sendMessage(id, {
-          text:
+      // Demote pelaku
+      await sock.groupParticipantsUpdate(id, [author], 'demote');
+
+      await sock.sendMessage(id, {
+        text:
 `☠️ ANTI KUDETA AKTIF ☠️
 
 Wkwkwk hama ngapain?
@@ -74,12 +71,11 @@ Nyoli aja jangan ambil grup gitu 😹
 
 🚫 Pelaku : @${pelakuNum.split('@')[0]}
 🛡️ Jabatan berhasil dicabut.`,
-          mentions: [author]
-        });
+        mentions: [author]
+      });
 
-      } catch (e) {
-        console.log('antikudeta error:', e.message);
-      }
+    } catch (e) {
+      console.log('antikudeta error:', e.message);
     }
   }
 };
