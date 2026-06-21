@@ -5,19 +5,27 @@ export default {
   group: true,
 
   async execute({ m, db }) {
-    const user = m.mentionedJid?.[0];
-    if (!user) return m.reply('Tag orang yang ingin dicek 😹');
+    const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+
+    const user = m.mentionedJid?.[0] ||
+      m.message?.extendedTextMessage?.contextInfo?.participant ||
+      null;
+
+    if (!user) return m.reply('Tag atau balas pesan orang yang ingin dicek!\n\nContoh: .cekkebal @user');
 
     if (!db.kebal) db.kebal = {};
     if (!db.kebal[m.chat]) db.kebal[m.chat] = [];
 
-    const isKebal = db.kebal[m.chat].includes(user);
+    const userNum = normalize(user);
+    const isKebal = db.kebal[m.chat].some(jid => normalize(jid) === userNum);
 
     await m.reply(
 `🛡️ STATUS KEKEBALAN
 
-👤 @${user.split('@')[0]}
-${isKebal ? '✅ Status : KEBAL 😹\n\nDia termasuk dalam daftar anggota yang dilindungi.' : '❌ Status : TIDAK KEBAL 🗿\n\nDia tidak termasuk dalam daftar anggota yang dilindungi.'}`,
+👤 @${userNum.split('@')[0]}
+${isKebal
+  ? '✅ Status : KEBAL 😹\n\nDia dilindungi, bot tidak akan menindaknya walau melakukan demote/kick.'
+  : '❌ Status : TIDAK KEBAL 🗿\n\nDia akan ditindak bot jika melakukan kudeta.'}`,
       { mentions: [user] }
     );
   }
