@@ -32,34 +32,35 @@ Contoh:
     if (!db.antikudeta?.[id]) return;
     if (!author) return;
 
+    // Normalize ID hapus ":xx"
     const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
 
     const botNumber = normalize(sock.user.id);
-    const ownerNumber = '447351572994@s.whatsapp.net';
     const pelakuNum = normalize(author);
 
-    // Skip kalau pelakunya bot sendiri atau owner
-    if (pelakuNum === botNumber || pelakuNum === ownerNumber) return;
+    // Skip kalau pelakunya bot sendiri — mencegah bot demote diri sendiri
+    if (pelakuNum === botNumber) return;
+
+    // Cek apakah pelaku ada di daftar kebal grup ini
+    const daftarKebal = db.kebal?.[id] || [];
+    const pelakuKebal = daftarKebal.some(jid => normalize(jid) === pelakuNum);
+    if (pelakuKebal) return; // pelaku kebal, dianggap tindakan sah bukan kudeta
 
     if (action === 'demote' || action === 'remove') {
       try {
-        // Cek dulu metadata grup, pastikan bot masih admin
+        // Ambil metadata terbaru
         const metadata = await sock.groupMetadata(id);
+
+        // Cek bot masih admin
         const botData = metadata.participants.find(p => normalize(p.id) === botNumber);
+        if (!botData?.admin) return; // bot bukan admin, diam saja
 
-        // Kalau bot bukan admin, tidak bisa tindak
-        if (!botData?.admin) {
-          return await sock.sendMessage(id, {
-            text: '⚠️ Bot bukan admin, tidak bisa menindak pelaku kudeta!'
-          });
-        }
-
-        // Cek apakah pelaku masih di grup dan masih admin
+        // Cek pelaku masih di grup dan masih admin
         const pelakuData = metadata.participants.find(p => normalize(p.id) === pelakuNum);
         if (!pelakuData) return; // pelaku sudah tidak di grup
-        if (!pelakuData.admin) return; // pelaku sudah bukan admin, skip
+        if (!pelakuData.admin) return; // pelaku sudah bukan admin
 
-        // Demote pelaku
+        // Demote pelaku kudeta
         await sock.groupParticipantsUpdate(id, [author], 'demote');
 
         await sock.sendMessage(id, {
@@ -78,9 +79,6 @@ Nyoli aja jangan ambil grup gitu 😹
 
       } catch (e) {
         console.log('antikudeta error:', e.message);
-        await sock.sendMessage(id, {
-          text: '⚠️ Gagal menindak pelaku kudeta: ' + e.message
-        });
       }
     }
   }
