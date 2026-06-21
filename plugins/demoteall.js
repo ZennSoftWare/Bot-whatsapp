@@ -7,7 +7,7 @@ export default {
   async execute({ sock, m }) {
     const from = m.key.remoteJid;
 
-    await m.reply('⚠️ Memulai pemberhentian admin massal... 📉');
+    await m.reply('⚠️ Memulai pemberhentian admin secara massal... 📉');
 
     try {
       const metadata = await sock.groupMetadata(from);
