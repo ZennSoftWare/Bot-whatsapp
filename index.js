@@ -159,11 +159,14 @@ async function startBot() {
       await sock.sendMessage(m.key.remoteJid, { text: txt, ...opts }, { quoted: m });
     };
 
-    // ==================== CEK ANTILINK (semua pesan, bukan hanya owner) ====================
+    // ==================== CEK ANTILINK ====================
     if (!m.key.fromMe && db.mode?.online) {
+      const sudahDipanggil = new Set();
       for (const key of Object.keys(plugins)) {
         const plugin = plugins[key];
         if (typeof plugin.onMessage === "function") {
+          if (sudahDipanggil.has(plugin)) continue;
+          sudahDipanggil.add(plugin);
           try {
             await plugin.onMessage({ sock, m, db });
             saveDB(db);
@@ -174,14 +177,13 @@ async function startBot() {
       }
     }
 
-    // ==================== CEK COMMAND (hanya dari owner/fromMe) ====================
+    // ==================== CEK COMMAND ====================
     if (!m.key.fromMe) return;
     if (!text.startsWith(prefix)) return;
 
     const args = text.slice(prefix.length).trim().split(" ");
     const command = args.shift().toLowerCase();
 
-    // Cek mode offline — hanya .onlinebot yang tetap jalan
     if (!db.mode?.online && command !== "onlinebot") return;
 
     const plugin = plugins[command];
@@ -200,9 +202,14 @@ async function startBot() {
   sock.ev.on("group-participants.update", async ({ id, participants, action, author }) => {
     if (!db.mode?.online) return;
 
+    // Pakai Set biar plugin yang sama tidak dipanggil berkali-kali
+    const sudahDipanggil = new Set();
+
     for (const key of Object.keys(plugins)) {
       const plugin = plugins[key];
       if (typeof plugin.onParticipantsUpdate === "function") {
+        if (sudahDipanggil.has(plugin)) continue;
+        sudahDipanggil.add(plugin);
         try {
           await plugin.onParticipantsUpdate({ sock, id, participants, action, author, db });
           saveDB(db);
