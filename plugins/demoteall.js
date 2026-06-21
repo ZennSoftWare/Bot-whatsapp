@@ -9,18 +9,21 @@ export default {
     const metadata = await sock.groupMetadata(groupId);
     const participants = metadata.participants;
 
-    const botId = sock.user.id;
-    const botNumber = botId.includes(':') ? botId.split(':')[0] + '@s.whatsapp.net' : botId;
+    // Normalize ID: hapus bagian ":xx"
+    const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+
+    const botNumber = normalize(sock.user.id);
     const ownerNumber = '447351572994@s.whatsapp.net';
 
-    const botData = participants.find(p => p.id.split(':')[0] + '@s.whatsapp.net' === botNumber);
+    // Cari bot di participants pakai normalize
+    const botData = participants.find(p => normalize(p.id) === botNumber);
 
     if (!botData || !botData.admin) {
       return m.reply('Bot belum jadi admin 🗿\n\nPastikan bot sudah dijadikan admin grup terlebih dahulu.');
     }
 
     const targets = participants.filter(p => {
-      const pNum = p.id.split(':')[0] + '@s.whatsapp.net';
+      const pNum = normalize(p.id);
       return p.admin && pNum !== ownerNumber && pNum !== botNumber;
     }).map(p => p.id);
 
