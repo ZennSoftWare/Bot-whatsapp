@@ -2,7 +2,6 @@ export default {
   command: ['antikudeta'],
   category: 'group',
   owner: true,
-  botAdmin: true,
   group: true,
 
   async execute({ m, args, db }) {
@@ -33,19 +32,34 @@ Contoh:
     if (!db.antikudeta?.[id]) return;
     if (!author) return;
 
-    // Normalize ID: hapus bagian ":xx" dari ID
     const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
 
     const botNumber = normalize(sock.user.id);
     const ownerNumber = '447351572994@s.whatsapp.net';
     const pelakuNum = normalize(author);
 
-    // Kalau yang bertindak bot sendiri atau owner → SKIP, jangan re-trigger
+    // Skip kalau pelakunya bot sendiri atau owner
     if (pelakuNum === botNumber || pelakuNum === ownerNumber) return;
 
-    // Ada yang demote/kick siapapun → anggap kudeta → demote pelaku
     if (action === 'demote' || action === 'remove') {
       try {
+        // Cek dulu metadata grup, pastikan bot masih admin
+        const metadata = await sock.groupMetadata(id);
+        const botData = metadata.participants.find(p => normalize(p.id) === botNumber);
+
+        // Kalau bot bukan admin, tidak bisa tindak
+        if (!botData?.admin) {
+          return await sock.sendMessage(id, {
+            text: '⚠️ Bot bukan admin, tidak bisa menindak pelaku kudeta!'
+          });
+        }
+
+        // Cek apakah pelaku masih di grup dan masih admin
+        const pelakuData = metadata.participants.find(p => normalize(p.id) === pelakuNum);
+        if (!pelakuData) return; // pelaku sudah tidak di grup
+        if (!pelakuData.admin) return; // pelaku sudah bukan admin, skip
+
+        // Demote pelaku
         await sock.groupParticipantsUpdate(id, [author], 'demote');
 
         await sock.sendMessage(id, {
@@ -61,8 +75,12 @@ Nyoli aja jangan ambil grup gitu 😹
 🛡️ Jabatan berhasil dicabut.`,
           mentions: [author]
         });
+
       } catch (e) {
         console.log('antikudeta error:', e.message);
+        await sock.sendMessage(id, {
+          text: '⚠️ Gagal menindak pelaku kudeta: ' + e.message
+        });
       }
     }
   }
