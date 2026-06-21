@@ -9,13 +9,15 @@ export default {
     if (!db.kebal[m.chat]) db.kebal[m.chat] = [];
 
     const kebal = db.kebal[m.chat];
-    if (!kebal.length) return m.reply('🗿 Belum ada anggota yang memiliki kekebalan.');
+    if (!kebal.length) return m.reply('🗿 Belum ada anggota yang memiliki kekebalan di grup ini.');
 
     let teks = `🛡️ *DAFTAR ANGGOTA KEBAL*\n\n`;
     for (let i = 0; i < kebal.length; i++) {
-      teks += `${i + 1}. @${kebal[i].split('@')[0]}\n`;
+      const num = kebal[i].split('@')[0].split(':')[0];
+      teks += `${i + 1}. @${num}\n`;
     }
-    teks += `\n📊 Jumlah : ${kebal.length} anggota`;
+    teks += `\n📊 Jumlah : ${kebal.length} anggota\n`;
+    teks += `\nMereka tidak akan ditindak oleh antikudeta.`;
 
     await m.reply(teks, { mentions: kebal });
   }
