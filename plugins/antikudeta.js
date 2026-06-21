@@ -33,33 +33,21 @@ Contoh:
     if (!db.antikudeta?.[id]) return;
     if (!author) return;
 
-    const botId = sock.user.id;
-    const botNumber = botId.includes(':') ? botId.split(':')[0] + '@s.whatsapp.net' : botId;
+    // Normalize ID: hapus bagian ":xx" dari ID
+    const normalize = (jid) => jid?.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+
+    const botNumber = normalize(sock.user.id);
     const ownerNumber = '447351572994@s.whatsapp.net';
+    const pelakuNum = normalize(author);
 
-    // Normalize pelaku
-    const pelakuNum = author.split(':')[0] + '@s.whatsapp.net';
+    // Kalau yang bertindak bot sendiri atau owner → SKIP, jangan re-trigger
+    if (pelakuNum === botNumber || pelakuNum === ownerNumber) return;
 
-    // Abaikan kalau pelakunya owner atau bot sendiri
-    if (pelakuNum === ownerNumber || pelakuNum === botNumber) return;
-
-    if (action === 'remove' || action === 'demote') {
-      // Cek apakah korbannya owner - kalau iya, restore admin owner dulu
-      for (const korban of participants) {
-        const korbanNum = korban.split(':')[0] + '@s.whatsapp.net';
-        if (korbanNum === ownerNumber) {
-          // Restore admin owner yang diturunkan
-          try {
-            await sock.groupParticipantsUpdate(id, [korban], 'promote');
-          } catch (e) {
-            console.log('Gagal restore owner:', e.message);
-          }
-        }
-      }
-
-      // Demote pelaku kudeta
+    // Ada yang demote/kick siapapun → anggap kudeta → demote pelaku
+    if (action === 'demote' || action === 'remove') {
       try {
         await sock.groupParticipantsUpdate(id, [author], 'demote');
+
         await sock.sendMessage(id, {
           text:
 `☠️ ANTI KUDETA AKTIF ☠️
