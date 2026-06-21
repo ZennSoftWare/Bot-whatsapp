@@ -35,7 +35,7 @@ Contoh:
     if (!author) return;
     if (action !== 'demote' && action !== 'remove') return;
 
-    // Normalize: ambil angka saja sebelum @ 
+    // Ambil angka saja — support @lid dan @s.whatsapp.net
     const getNumber = (jid) => jid?.split('@')[0].split(':')[0];
 
     const botNumber = getNumber(sock.user.id);
@@ -52,43 +52,45 @@ Contoh:
     try {
       const metadata = await sock.groupMetadata(id);
 
-      // Cari bot di participants pakai perbandingan NUMBER saja (bukan full JID)
+      // Cari bot di participants — bandingkan number saja bukan full JID
       const botData = metadata.participants.find(p => getNumber(p.id) === botNumber);
+      if (!botData?.admin) return;
+
+      // Cari pelaku di participants
       const pelakuData = metadata.participants.find(p => getNumber(p.id) === pelakuNumber);
+      if (!pelakuData) return;
 
-      console.log("🛡️ botData:", JSON.stringify(botData));
-      console.log("🛡️ pelakuData:", JSON.stringify(pelakuData));
-
-      if (!botData) {
-        return await sock.sendMessage(id, { text: '⚠️ Bot tidak ditemukan di participants grup!' });
+      // Restore jabatan korban yang didemote
+      if (action === 'demote') {
+        for (const korban of participants) {
+          const korbanNumber = getNumber(korban);
+          if (korbanNumber === botNumber || korbanNumber === pelakuNumber) continue;
+          try {
+            await sock.groupParticipantsUpdate(id, [korban], 'promote');
+          } catch (e) {
+            console.log('Gagal restore korban:', e.message);
+          }
+        }
       }
-
-      if (!botData.admin) {
-        return await sock.sendMessage(id, { text: '⚠️ Bot belum jadi admin, jadikan terlebih dahulu woi 😹' });
-      }
-
-      if (!pelakuData) return; // pelaku sudah tidak di grup
 
       // Demote pelaku
       await sock.groupParticipantsUpdate(id, [author], 'demote');
 
       await sock.sendMessage(id, {
         text:
-`☠️ ANTI KUDETA AKTIF ☠️
+`☠️ *ANTI KUDETA AKTIF* ⚠️
 
-Wkwkwk hama ngapain?
-Mau ambil alih grup?
+Hama ngapain mau ngambil alih grup?
+Mending nyoli aja gk usah ngambil gitu 😹
 
-Nyoli aja jangan ambil grup gitu 😹
-
+🔄 Jabatan admin korban telah dikembalikan
 🚫 Pelaku : @${pelakuNumber}
-🛡️ Jabatan berhasil dicabut.`,
+📉 Jabatan pelaku berhasil dicabut`,
         mentions: [author]
       });
 
     } catch (e) {
       console.log('antikudeta error:', e.message);
-      await sock.sendMessage(id, { text: '❌ Antikudeta error: ' + e.message });
     }
   }
 };
