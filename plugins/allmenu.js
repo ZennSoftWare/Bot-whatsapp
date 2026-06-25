@@ -24,6 +24,8 @@ Berikut daftar perintah yang tersedia:
 ◇ .kick @user
 ◇ .open
 ◇ .close
+◇ .promote @user
+◇ .demote @user
 
 ━━━━━━━━━━━━━━
 🛡️ *SECURITY MENU*
