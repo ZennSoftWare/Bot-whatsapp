@@ -123,6 +123,13 @@ async function startBot() {
 
     if (connection === "open") {
       console.log("✅ Bot berhasil online! Siap digunakan.\n");
+      // Simpan nomor bot/owner ke db otomatis
+      const botNum = sock.user.id.split('@')[0].split(':')[0];
+      if (!db.ownerNum) {
+        db.ownerNum = botNum;
+        saveDB(db);
+        console.log("✅ Nomor owner tersimpan:", botNum);
+      }
     }
 
     if (connection === "close") {
@@ -204,6 +211,58 @@ async function startBot() {
     console.log("🔔 GROUP EVENT:", JSON.stringify(data));
 
     const { id, participants, action, author } = data;
+
+    // ✅ FIX: Tangkap @lid bot langsung dari event
+    // Cara: cek metadata grup, cari participant yang nomornya sama dengan bot
+    // lalu simpan id-nya (bisa @s.whatsapp.net atau @lid) sebagai db.botLid
+    // Ini lebih reliable dari p.lid karena langsung dari data event nyata
+    if (author) {
+      const botPhone = sock.user.id.split('@')[0].split(':')[0];
+      // Cek apakah author event ini adalah bot via metadata
+      if (!db.botLid) {
+        try {
+          const meta = await sock.groupMetadata(id);
+          for (const p of meta.participants) {
+            const pPhone = p.id.split('@')[0].split(':')[0];
+            if (pPhone === botPhone) {
+              // Simpan semua kemungkinan ID bot
+              db.botPhone = botPhone;
+              db.botFullId = p.id; // ID resmi di metadata (@s.whatsapp.net)
+              if (p.lid) db.botLid = p.lid; // @lid jika ada
+              saveDB(db);
+              console.log("✅ Bot ID tersimpan:", db.botFullId, db.botLid || '(no lid)');
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+      // ✅ FALLBACK: Cek sock.user.lid (tersedia di beberapa versi Baileys)
+      if (!db.botLid && sock.user?.lid) {
+        db.botLid = sock.user.lid;
+        saveDB(db);
+        console.log("✅ Bot @lid dari sock.user:", db.botLid);
+      }
+      // ✅ FALLBACK 2: Cek apakah author event ini adalah bot via perbandingan nomor
+      // Kalau author nomornya cocok dengan botPhone, berarti author adalah bot dalam format @lid
+      if (!db.botLid && author) {
+        try {
+          const meta2 = await sock.groupMetadata(id);
+          const botPhone2 = sock.user.id.split('@')[0].split(':')[0];
+          for (const p of meta2.participants) {
+            // Cari participant yang punya @lid = author dan nomor = botPhone
+            if (p.lid && p.lid === author) {
+              const pPhone = p.id.split('@')[0].split(':')[0];
+              if (pPhone === botPhone2) {
+                db.botLid = author; // author ini adalah bot dalam format @lid
+                saveDB(db);
+                console.log("✅ Bot @lid dari author event:", db.botLid);
+              }
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+    }
 
     if (!db.mode?.online) return;
 
