@@ -1,24 +1,25 @@
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import {
+  proto,
+  generateWAMessageFromContent,
+  isJidGroup
+} from '@whiskeysockets/baileys';
 
-// ============================================================
-// MAPPING GAMBAR
-// Simpan 6 gambar di folder ./assets/ di server bot kamu
-// Nama file sesuaikan dengan yang kamu upload
-// ============================================================
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const IMAGES = {
-  menu:     './assets/menu_utama.jpg',     // Gambar 1 — tampilan awal .menu
-  group:    './assets/menu_group.png',     // Gambar 2 — Group/Standard Menu
-  security: './assets/menu_security.png',  // Gambar 3 — Security Menu
-  welcome:  './assets/menu_welcome.png',   // Gambar 4 — Welcome & Goodbye
-  kudeta:   './assets/menu_kudeta.png',    // Gambar 5 — Kudeta Menu
-  main:     './assets/menu_main.jpg',      // Gambar 6 — Main Menu
+  menu:     path.join(__dirname, '../assets/menu_utama.jpg'),
+  main:     path.join(__dirname, '../assets/menu_main.jpg'),
+  group:    path.join(__dirname, '../assets/menu_group.png'),
+  security: path.join(__dirname, '../assets/menu_security.png'),
+  welcome:  path.join(__dirname, '../assets/menu_welcome.png'),
+  kudeta:   path.join(__dirname, '../assets/menu_kudeta.png'),
 };
 
-// ============================================================
-// ISI MENU PER KATEGORI
-// ============================================================
 const MENU_CONTENT = {
-  main:
+  menu_main:
 `🏓 *MAIN MENU*
 ━━━━━━━━━━━━━━
 ◇ .ping
@@ -27,7 +28,7 @@ const MENU_CONTENT = {
 ◇ .offlinebot
 ━━━━━━━━━━━━━━`,
 
-  group:
+  menu_group:
 `👥 *GROUP MENU*
 ━━━━━━━━━━━━━━
 ◇ .tagall
@@ -42,7 +43,7 @@ const MENU_CONTENT = {
 ◇ .antitoxic on/off
 ━━━━━━━━━━━━━━`,
 
-  security:
+  menu_security:
 `🛡️ *SECURITY MENU*
 ━━━━━━━━━━━━━━
 ◇ .antikudeta on/off
@@ -53,14 +54,14 @@ const MENU_CONTENT = {
 ◇ .cekkebal @user
 ━━━━━━━━━━━━━━`,
 
-  welcome:
+  menu_welcome:
 `👋 *WELCOME & GOODBYE*
 ━━━━━━━━━━━━━━
 ◇ .setwelcome [pesan]
 ◇ .setout [pesan]
 ━━━━━━━━━━━━━━`,
 
-  kudeta:
+  menu_kudeta:
 `☠️ *KUDETA MENU*
 ━━━━━━━━━━━━━━
 ◇ .allkick ☠️
@@ -69,16 +70,76 @@ const MENU_CONTENT = {
 ━━━━━━━━━━━━━━`,
 };
 
-// Fungsi kirim gambar + teks, fallback ke teks kalau gambar gagal
-async function sendImageWithText(sock, jid, imagePath, text, quoted) {
+const IMAGE_MAP = {
+  menu_main:     IMAGES.main,
+  menu_group:    IMAGES.group,
+  menu_security: IMAGES.security,
+  menu_welcome:  IMAGES.welcome,
+  menu_kudeta:   IMAGES.kudeta,
+};
+
+function buildInteractiveNodes(jid, badge = true) {
+  const nodes = [{
+    tag: 'biz', attrs: {}, content: [{
+      tag: 'interactive', attrs: { type: 'native_flow', v: '1' },
+      content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+    }]
+  }];
+  if (badge && !isJidGroup(jid)) {
+    nodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
+  }
+  return nodes;
+}
+
+async function sendList(sock, jid, title, body, footer, buttonText, sections, quoted) {
+  const interactiveContent = proto.Message.InteractiveMessage.create({
+    header: proto.Message.InteractiveMessage.Header.create({
+      title,
+      hasMediaAttachment: false
+    }),
+    body: proto.Message.InteractiveMessage.Body.create({ text: body }),
+    footer: proto.Message.InteractiveMessage.Footer.create({ text: footer }),
+    nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+      buttons: [{
+        name: 'single_select',
+        buttonParamsJson: JSON.stringify({ title: buttonText, sections })
+      }]
+    })
+  });
+
+  const msg = generateWAMessageFromContent(jid, {
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: {
+          deviceListMetadata: {},
+          deviceListMetadataVersion: 2
+        },
+        interactiveMessage: interactiveContent
+      }
+    }
+  }, { userJid: sock.user.id, quoted });
+
+  await sock.relayMessage(jid, msg.message, {
+    messageId: msg.key.id,
+    additionalNodes: buildInteractiveNodes(jid, true)
+  });
+}
+
+async function kirimGambar(sock, jid, imgPath, caption, senderJid, quoted) {
   try {
-    const imageBuffer = fs.readFileSync(imagePath);
+    if (!fs.existsSync(imgPath)) throw new Error('not found');
+    const buffer = fs.readFileSync(imgPath);
     await sock.sendMessage(jid, {
-      image: imageBuffer,
-      caption: text
-    }, { quoted });
+      image: buffer,
+      mimetype: 'image/jpeg',
+      caption,
+      mentions: senderJid ? [senderJid] : []
+    }, quoted ? { quoted } : {});
   } catch (e) {
-    await sock.sendMessage(jid, { text }, { quoted });
+    await sock.sendMessage(jid, {
+      text: caption,
+      mentions: senderJid ? [senderJid] : []
+    }, quoted ? { quoted } : {});
   }
 }
 
@@ -90,85 +151,88 @@ export default {
   async execute({ sock, m, db }) {
     const jid = m.key.remoteJid;
     const senderJid = m.key.participant || m.key.remoteJid;
-    const senderNum = senderJid?.split('@')[0].split(':')[0];
+    const senderName = m.pushName || senderJid?.split('@')[0].split(':')[0];
 
-    // Kirim gambar utama + sapaan
-    await sendImageWithText(
+    // Kirim gambar + sapaan
+    await kirimGambar(
       sock, jid, IMAGES.menu,
 `╔══════════════════╗
    ✦ *XZEERH BOT SYSTEM* ✦
 ╚══════════════════╝
 
-Halo Owner @${senderNum}! 👋
+Halo Owner *${senderName}*! 👋
 Selamat datang di *Xzeerh Bot*
 Pilih kategori menu di bawah untuk melihat daftar perintah!`,
-      m
+      senderJid, m
     );
 
-    // Kirim list menu interaktif
-    await sock.sendMessage(jid, {
-      listMessage: {
-        title: '✦ XZEERH BOT MENU ✦',
-        text: 'Pilih kategori menu yang ingin kamu lihat 👇',
-        footerText: 'Xzeerh Bot • Powered by Baileys',
-        buttonText: '📋 List Menu',
-        sections: [
-          {
-            title: '📂 KATEGORI MENU',
-            rows: [
-              {
-                title: '🏓 MAIN MENU',
-                description: 'ping, statusbot, onlinebot, offlinebot',
-                rowId: 'menu_main'
-              },
-              {
-                title: '👥 GROUP MENU',
-                description: 'tagall, hidetag, kick, open, close, dll',
-                rowId: 'menu_group'
-              },
-              {
-                title: '🛡️ SECURITY MENU',
-                description: 'antikudeta, antilink, kebal, dll',
-                rowId: 'menu_security'
-              },
-              {
-                title: '👋 WELCOME & GOODBYE',
-                description: 'setwelcome, setout',
-                rowId: 'menu_welcome'
-              },
-              {
-                title: '☠️ KUDETA MENU',
-                description: 'allkick, demoteall, nonaktifgrup',
-                rowId: 'menu_kudeta'
-              },
-            ]
-          }
-        ]
-      }
-    }, { quoted: m });
+    // ✅ Kirim list menu langsung setelah gambar tanpa jeda
+    // ✅ Hapus description di tiap row — hanya tampil title saja
+    await sendList(
+      sock, jid,
+      '✦ XZEERH BOT MENU ✦',
+      'Pilih kategori menu yang ingin kamu lihat 👇',
+      'Xzeerh Bot • Powered by Baileys',
+      '📋 List Menu',
+      [
+        {
+          title: '📂 KATEGORI MENU',
+          rows: [
+            { title: '🏓 MAIN MENU',         id: 'menu_main' },
+            { title: '👥 GROUP MENU',         id: 'menu_group' },
+            { title: '🛡️ SECURITY MENU',     id: 'menu_security' },
+            { title: '👋 WELCOME & GOODBYE',  id: 'menu_welcome' },
+            { title: '☠️ KUDETA MENU',        id: 'menu_kudeta' },
+          ]
+        }
+      ],
+      m
+    );
   },
 
-  // Tangkap pilihan dari list menu
   async onMessage({ sock, m, db }) {
     const jid = m.key.remoteJid;
 
-    const selectedId =
-      m.message?.listResponseMessage?.singleSelectReply?.selectedRowId || null;
+    // Tangkap semua kemungkinan format response dari list interaktif
+    let selectedId = null;
+
+    // Format 1: interactiveResponseMessage (native flow — format baru)
+    try {
+      const paramsJson = m.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
+      if (paramsJson) {
+        const parsed = JSON.parse(paramsJson);
+        selectedId = parsed?.id || parsed?.selectedId || null;
+      }
+    } catch (_) {}
+
+    // Format 2: interactiveResponseMessage body (kadang id ada di sini)
+    if (!selectedId) {
+      try {
+        const body = m.message?.interactiveResponseMessage?.body?.text;
+        if (body && body.startsWith('menu_')) selectedId = body;
+      } catch (_) {}
+    }
+
+    // Format 3: listResponseMessage (format lama)
+    if (!selectedId) {
+      selectedId = m.message?.listResponseMessage?.singleSelectReply?.selectedRowId || null;
+    }
+
+    // Format 4: nativeFlowResponseMessage langsung
+    if (!selectedId) {
+      try {
+        const paramsJson = m.message?.nativeFlowResponseMessage?.paramsJson;
+        if (paramsJson) {
+          const parsed = JSON.parse(paramsJson);
+          selectedId = parsed?.id || null;
+        }
+      } catch (_) {}
+    }
 
     if (!selectedId || !selectedId.startsWith('menu_')) return;
+    if (!IMAGE_MAP[selectedId] || !MENU_CONTENT[selectedId]) return;
 
-    const category = selectedId.replace('menu_', '');
-
-    const imageMap = {
-      main:     IMAGES.main,
-      group:    IMAGES.group,
-      security: IMAGES.security,
-      welcome:  IMAGES.welcome,
-      kudeta:   IMAGES.kudeta,
-    };
-
-    if (!imageMap[category] || !MENU_CONTENT[category]) return;
-
-    await sendImageWithText(sock, jid, imageMap[category], MENU_CONTENT[category], m);
+    // Kirim gambar + seluruh isi menu kategori yang dipilih
+    await kirimGambar(sock, jid, IMAGE_MAP[selectedId], MENU_CONTENT[selectedId], null, m);
   }
 };
