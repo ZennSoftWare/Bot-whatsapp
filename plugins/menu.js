@@ -37,6 +37,7 @@ const MENU_CONTENT = {
 ◇ .close
 ◇ .promote @user
 ◇ .demote @user
+◇ .add +62xxxx
 ◇ .antitagsw on/off
 ◇ .antitoxic on/off
 ━━━━━━━━━━━━━━`,
@@ -98,7 +99,7 @@ export default {
    ✦ *XZEERH BOT SYSTEM* ✦
 ╚══════════════════╝
 
-Halo @${senderNum}! 👋
+Halo Owner @${senderNum}! 👋
 Selamat datang di *Xzeerh Bot*
 Pilih kategori menu di bawah untuk melihat daftar perintah!`,
       m
