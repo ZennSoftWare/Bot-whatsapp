@@ -166,7 +166,28 @@ async function startBot() {
       await sock.sendMessage(m.key.remoteJid, { text: txt, ...opts }, { quoted: m });
     };
 
-    // ==================== CEK ANTILINK ====================
+    // ==================== CEK LIST RESPONSE (menu interaktif) ====================
+    // Harus dicek SEBELUM filter fromMe karena listResponse datang dari user
+    const isListResponse = !!m.message?.listResponseMessage || !!m.message?.interactiveResponseMessage;
+    if (isListResponse && db.mode?.online) {
+      const sudahDipanggil = new Set();
+      for (const key of Object.keys(plugins)) {
+        const plugin = plugins[key];
+        if (typeof plugin.onMessage === "function") {
+          if (sudahDipanggil.has(plugin)) continue;
+          sudahDipanggil.add(plugin);
+          try {
+            await plugin.onMessage({ sock, m, db });
+            saveDB(db);
+          } catch (e) {
+            console.log("Error onMessage listResponse:", e.message);
+          }
+        }
+      }
+      return; // Selesai, tidak perlu lanjut ke command handler
+    }
+
+    // ==================== CEK ANTILINK & onMessage ====================
     if (!m.key.fromMe && db.mode?.online) {
       const sudahDipanggil = new Set();
       for (const key of Object.keys(plugins)) {
