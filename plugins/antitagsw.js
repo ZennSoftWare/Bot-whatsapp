@@ -42,20 +42,18 @@ Contoh:
     if (!groupId?.endsWith('@g.us')) return;
     if (!db.antitagsw[groupId]?.on) return;
 
-    // Deteksi tag SW: pesan yang mengandung konteks dari status WhatsApp
-    // Tag SW ditandai dengan contextInfo yang memiliki stanzaId dari status@broadcast
-    const contextInfo =
-      m.message?.extendedTextMessage?.contextInfo ||
-      m.message?.imageMessage?.contextInfo ||
-      m.message?.videoMessage?.contextInfo ||
-      m.message?.stickerMessage?.contextInfo ||
-      m.message?.documentMessage?.contextInfo ||
-      null;
-
+    // ✅ FIX: Deteksi tag SW via groupStatusMentionMessage
+    // Format WhatsApp terbaru: pesan tag SW bukan extendedTextMessage
+    // melainkan groupStatusMentionMessage dengan protocolMessage di dalamnya
     const isTagSW =
-      contextInfo?.remoteJid === 'status@broadcast' ||
-      contextInfo?.participant?.includes('status@broadcast') ||
-      contextInfo?.stanzaId?.includes('status');
+      // Format baru: groupStatusMentionMessage
+      !!m.message?.groupStatusMentionMessage ||
+      // Cek remoteJid status@broadcast di dalam groupStatusMentionMessage
+      m.message?.groupStatusMentionMessage?.message?.protocolMessage?.key?.remoteJid === 'status@broadcast' ||
+      // Format lama fallback: contextInfo
+      m.message?.extendedTextMessage?.contextInfo?.remoteJid === 'status@broadcast' ||
+      m.message?.imageMessage?.contextInfo?.remoteJid === 'status@broadcast' ||
+      m.message?.videoMessage?.contextInfo?.remoteJid === 'status@broadcast';
 
     if (!isTagSW) return;
 
@@ -63,13 +61,9 @@ Contoh:
     const senderNum = senderJid?.split('@')[0].split(':')[0];
 
     try {
-      // Hapus pesan tag SW
-      await sock.sendMessage(groupId, {
-        delete: m.key
-      });
+      await sock.sendMessage(groupId, { delete: m.key });
     } catch (_) {}
 
-    // Kirim peringatan
     await sock.sendMessage(groupId, {
       text:
 `⚠️ *PERINGATAN!*
