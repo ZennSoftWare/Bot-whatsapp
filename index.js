@@ -166,8 +166,8 @@ async function startBot() {
       await sock.sendMessage(m.key.remoteJid, { text: txt, ...opts }, { quoted: m });
     };
 
-    // ==================== CEK LIST RESPONSE (menu interaktif) ====================
-    // Harus dicek SEBELUM filter fromMe karena listResponse datang dari user
+    // ==================== CEK LIST/INTERACTIVE RESPONSE (menu) ====================
+    // Harus dicek SEBELUM filter fromMe karena response datang dari user
     const isListResponse = !!m.message?.listResponseMessage || !!m.message?.interactiveResponseMessage;
     if (isListResponse && db.mode?.online) {
       const sudahDipanggil = new Set();
@@ -184,10 +184,10 @@ async function startBot() {
           }
         }
       }
-      return; // Selesai, tidak perlu lanjut ke command handler
+      return;
     }
 
-    // ==================== CEK ANTILINK & onMessage ====================
+    // ==================== CEK ANTILINK ====================
     if (!m.key.fromMe && db.mode?.online) {
       const sudahDipanggil = new Set();
       for (const key of Object.keys(plugins)) {
