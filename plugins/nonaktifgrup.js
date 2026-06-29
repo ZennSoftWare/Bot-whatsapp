@@ -10,13 +10,33 @@ export default {
     try {
       const metadata = await sock.groupMetadata(groupId);
       const participants = metadata.participants;
-      const botId = sock.user.id.split(':')[0] + '@s.whatsapp.net';
 
-      // Cek apakah bot adalah admin
-      const botData = participants.find(p => p.id === botId);
-      if (!botData || (botData.admin !== 'admin' && botData.admin !== 'superadmin')) {
+      const getNum = (jid) => jid?.split('@')[0].split(':')[0];
+      const botPhone = getNum(sock.user.id);
+
+      // ✅ FIX: Cari bot via nomor HP, @lid (db.botLid), dan db.botFullId
+      const botData = participants.find(p => {
+        if (getNum(p.id) === botPhone) return true;
+        if (db.botLid && p.lid === db.botLid) return true;
+        if (db.botFullId && p.id === db.botFullId) return true;
+        if (db.botLid && getNum(p.lid) === getNum(db.botLid)) return true;
+        return false;
+      });
+
+      // ✅ DEBUG: Log hasil pencarian bot
+      console.log('[nonaktifgrup] botPhone:', botPhone);
+      console.log('[nonaktifgrup] botData:', botData ? `found: ${botData.id} admin:${botData.admin}` : 'NOT FOUND');
+      console.log('[nonaktifgrup] participants:', participants.map(p => `${p.id}|${p.admin}`).join(', '));
+
+      if (!botData) {
+        return m.reply(`❌ Bot tidak ditemukan di grup ini! (botPhone: ${botPhone})`);
+      }
+
+      if (botData.admin !== 'admin' && botData.admin !== 'superadmin') {
         return m.reply('❌ Bot harus menjadi admin terlebih dahulu!');
       }
+
+      const botId = botData.id;
 
       await m.reply('⚠️ Memulai proses nonaktifkan grup secara permanen...');
 
@@ -29,7 +49,7 @@ export default {
         await new Promise(r => setTimeout(r, 800));
       }
 
-      // 2. Kunci grup: hanya admin bisa kirim pesan & ubah info
+      // 2. Kunci grup
       await sock.groupSettingUpdate(groupId, 'announcement');
       await new Promise(r => setTimeout(r, 500));
       await sock.groupSettingUpdate(groupId, 'locked');
@@ -42,16 +62,17 @@ export default {
         await new Promise(r => setTimeout(r, 300));
       }
 
-      // 4. Ganti nama & hapus deskripsi grup
+      // 4. Ganti nama & hapus deskripsi
       await sock.groupUpdateSubject(groupId, '⛔ GROUP TELAH DINONAKTIFKAN PERMANEN');
       await new Promise(r => setTimeout(r, 300));
       await sock.groupUpdateDescription(groupId, '');
       await new Promise(r => setTimeout(r, 300));
 
-      // 5. Bot keluar dari grup
+      // 5. Bot keluar
       await sock.groupLeave(groupId);
 
     } catch (e) {
+      console.log('[nonaktifgrup] error:', e.message);
       await m.reply('❌ Gagal nonaktifkan grup: ' + e.message);
     }
   }
