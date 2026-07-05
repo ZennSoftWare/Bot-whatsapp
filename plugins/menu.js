@@ -16,6 +16,7 @@ const IMAGES = {
   security: path.join(__dirname, '../assets/menu_security.png'),
   welcome:  path.join(__dirname, '../assets/menu_welcome.png'),
   kudeta:   path.join(__dirname, '../assets/menu_kudeta.png'),
+  ai:       path.join(__dirname, '../assets/menu_ai.jpg'),
 };
 
 const MENU_CONTENT = {
@@ -26,6 +27,7 @@ const MENU_CONTENT = {
 ◇ .statusbot
 ◇ .onlinebot
 ◇ .offlinebot
+◇ .cleansession
 ━━━━━━━━━━━━━━`,
 
   menu_group:
@@ -68,6 +70,16 @@ const MENU_CONTENT = {
 ◇ .demoteall ☠️
 ◇ .nonaktifgrup ☠️
 ━━━━━━━━━━━━━━`,
+
+  menu_ai:
+`🤖 *AI MENU*
+━━━━━━━━━━━━━━
+◇ .xai [pertanyaan]
+◇ .gpt4o [pertanyaan]
+◇ .deepseek [pertanyaan]
+◇ .haiku [pertanyaan]
+◇ .qwen3 [pertanyaan]
+━━━━━━━━━━━━━━`,
 };
 
 const IMAGE_MAP = {
@@ -76,6 +88,7 @@ const IMAGE_MAP = {
   menu_security: IMAGES.security,
   menu_welcome:  IMAGES.welcome,
   menu_kudeta:   IMAGES.kudeta,
+  menu_ai:       IMAGES.ai,
 };
 
 function buildInteractiveNodes(jid, badge = true) {
@@ -153,7 +166,6 @@ export default {
     const senderJid = m.key.participant || m.key.remoteJid;
     const senderName = m.pushName || senderJid?.split('@')[0].split(':')[0];
 
-    // Kirim gambar + sapaan
     await kirimGambar(
       sock, jid, IMAGES.menu,
 `╔══════════════════╗
@@ -166,8 +178,6 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
       senderJid, m
     );
 
-    // ✅ Kirim list menu langsung setelah gambar tanpa jeda
-    // ✅ Hapus description di tiap row — hanya tampil title saja
     await sendList(
       sock, jid,
       '✦ XZEERH BOT MENU ✦',
@@ -178,11 +188,12 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
         {
           title: '📂 KATEGORI MENU',
           rows: [
-            { title: '🏓 MAIN MENU',         id: 'menu_main' },
-            { title: '👥 GROUP MENU',         id: 'menu_group' },
-            { title: '🛡️ SECURITY MENU',     id: 'menu_security' },
-            { title: '👋 WELCOME & GOODBYE',  id: 'menu_welcome' },
-            { title: '☠️ KUDETA MENU',        id: 'menu_kudeta' },
+            { title: '🏓 MAIN MENU',          id: 'menu_main' },
+            { title: '👥 GROUP MENU',          id: 'menu_group' },
+            { title: '🛡️ SECURITY MENU',      id: 'menu_security' },
+            { title: '👋 WELCOME & GOODBYE',   id: 'menu_welcome' },
+            { title: '☠️ KUDETA MENU',         id: 'menu_kudeta' },
+            { title: '🤖 AI MENU',             id: 'menu_ai' },
           ]
         }
       ],
@@ -193,10 +204,8 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
   async onMessage({ sock, m, db }) {
     const jid = m.key.remoteJid;
 
-    // Tangkap semua kemungkinan format response dari list interaktif
     let selectedId = null;
 
-    // Format 1: interactiveResponseMessage (native flow — format baru)
     try {
       const paramsJson = m.message?.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson;
       if (paramsJson) {
@@ -205,7 +214,6 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
       }
     } catch (_) {}
 
-    // Format 2: interactiveResponseMessage body (kadang id ada di sini)
     if (!selectedId) {
       try {
         const body = m.message?.interactiveResponseMessage?.body?.text;
@@ -213,12 +221,10 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
       } catch (_) {}
     }
 
-    // Format 3: listResponseMessage (format lama)
     if (!selectedId) {
       selectedId = m.message?.listResponseMessage?.singleSelectReply?.selectedRowId || null;
     }
 
-    // Format 4: nativeFlowResponseMessage langsung
     if (!selectedId) {
       try {
         const paramsJson = m.message?.nativeFlowResponseMessage?.paramsJson;
@@ -232,7 +238,6 @@ Pilih kategori menu di bawah untuk melihat daftar perintah!`,
     if (!selectedId || !selectedId.startsWith('menu_')) return;
     if (!IMAGE_MAP[selectedId] || !MENU_CONTENT[selectedId]) return;
 
-    // Kirim gambar + seluruh isi menu kategori yang dipilih
     await kirimGambar(sock, jid, IMAGE_MAP[selectedId], MENU_CONTENT[selectedId], null, m);
   }
 };
