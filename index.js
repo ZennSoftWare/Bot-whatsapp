@@ -34,6 +34,18 @@ function saveDB(db) {
 const db = loadDB();
 if (!db.mode) db.mode = { online: true };
 
+// ✅ FIX 1: saveDB pakai debounce — max 1x save per 5 detik
+// Sebelumnya tiap pesan masuk langsung saveDB() = 100 pesan > 100 writeFileSync > CPU/RAM modar
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveDB(db);
+    saveTimer = null;
+  }, 5000);
+}
+
+// Interval backup tetap ada sebagai safety net
 setInterval(() => saveDB(db), 30000);
 
 // ==================== INPUT NOMOR ====================
@@ -72,7 +84,14 @@ for (const file of files) {
 console.log(`\n  Total plugin: ${Object.keys(plugins).length}`);
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
+// ✅ FIX 2: Guard reconnect — cegah loop reconnect saat internet cacat
+// Tanpa guard: internet putus > reconnect > putus lagi > reconnect terus > handshake WA spam
+let reconnecting = false;
+
 // ==================== START BOT ====================
+// ✅ FIX: Catat waktu bot nyala untuk skip pesan lama
+let botStartTime = Date.now();
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState("./session");
   const { version } = await fetchLatestBaileysVersion();
@@ -122,14 +141,36 @@ async function startBot() {
     }
 
     if (connection === "open") {
+      // Reset guard reconnect saat berhasil konek
+      reconnecting = false;
+      // ✅ FIX: Reset botStartTime setiap kali connect/reconnect
+      // Ini penting agar setelah reconnect, pesan lama tetap di-skip
+      botStartTime = Date.now();
       console.log("✅ Bot berhasil online! Siap digunakan.\n");
-      // Simpan nomor bot/owner ke db otomatis
       const botNum = sock.user.id.split('@')[0].split(':')[0];
       if (!db.ownerNum) {
         db.ownerNum = botNum;
         saveDB(db);
         console.log("✅ Nomor owner tersimpan:", botNum);
       }
+      db.botJid = sock.user.id;
+      scheduleSave();
+
+      // ✅ FIX: Keepalive — kirim ping ke WA setiap 30 detik
+      // Mencegah koneksi "tidur" saat bot idle lama (> 1 jam tidak dipakai)
+      // Tanpa ini: koneksi WA bisa dormant, bot jadi lambat respons setelah idle
+      const keepAliveInterval = setInterval(async () => {
+        try {
+          await sock.sendPresenceUpdate('available');
+        } catch (_) {
+          clearInterval(keepAliveInterval);
+        }
+      }, 30000);
+
+      // Bersihkan interval kalau koneksi tutup
+      sock.ev.on('connection.update', ({ connection }) => {
+        if (connection === 'close') clearInterval(keepAliveInterval);
+      });
     }
 
     if (connection === "close") {
@@ -139,18 +180,36 @@ async function startBot() {
         fs.rmSync("./session", { recursive: true, force: true });
         process.exit(0);
       } else {
-        console.log("🔄 Reconnecting dalam 3 detik...");
-        setTimeout(startBot, 3000);
+        // ✅ FIX 2: Cek guard sebelum reconnect
+        if (reconnecting) {
+          console.log("⚠️ Reconnect sudah berjalan, skip...");
+          return;
+        }
+        reconnecting = true;
+        console.log("🔄 Reconnecting dalam 5 detik...");
+        setTimeout(() => {
+          startBot().catch(e => {
+            console.log("❌ Gagal reconnect:", e.message);
+            reconnecting = false;
+          });
+        }, 5000);
       }
     }
   });
 
-  // ==================== PESAN MASUK ====================
+  // ==================== CEK LIST/INTERACTIVE RESPONSE (menu) ====================
+  // Harus dicek SEBELUM filter fromMe karena response datang dari user
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
     const m = messages[0];
     if (!m?.message) return;
+
+    // ✅ FIX: Skip pesan lama yang datang saat bot baru connect
+    // Baileys flush pesan pending dari server WA saat pertama konek
+    // Akibatnya bot spam respons untuk pesan yang sudah lama dikirim
+    const msgTimestamp = (m.messageTimestamp || 0) * 1000;
+    if (msgTimestamp && msgTimestamp < botStartTime - 10000) return;
 
     const text =
       m.message?.conversation ||
@@ -166,9 +225,11 @@ async function startBot() {
       await sock.sendMessage(m.key.remoteJid, { text: txt, ...opts }, { quoted: m });
     };
 
-    // ==================== CEK LIST/INTERACTIVE RESPONSE (menu) ====================
-    // Harus dicek SEBELUM filter fromMe karena response datang dari user
-    const isListResponse = !!m.message?.listResponseMessage || !!m.message?.interactiveResponseMessage;
+    // Handler list/interactive response (dari user, bukan fromMe)
+    const isListResponse =
+      !!m.message?.listResponseMessage ||
+      !!m.message?.interactiveResponseMessage;
+
     if (isListResponse && db.mode?.online) {
       const sudahDipanggil = new Set();
       for (const key of Object.keys(plugins)) {
@@ -178,7 +239,7 @@ async function startBot() {
           sudahDipanggil.add(plugin);
           try {
             await plugin.onMessage({ sock, m, db });
-            saveDB(db);
+            scheduleSave(); // ✅ debounce, bukan langsung save
           } catch (e) {
             console.log("Error onMessage listResponse:", e.message);
           }
@@ -187,7 +248,7 @@ async function startBot() {
       return;
     }
 
-    // ==================== CEK ANTILINK ====================
+    // ==================== CEK onMessage (antilink, antitoxic, dll) ====================
     if (!m.key.fromMe && db.mode?.online) {
       const sudahDipanggil = new Set();
       for (const key of Object.keys(plugins)) {
@@ -197,7 +258,7 @@ async function startBot() {
           sudahDipanggil.add(plugin);
           try {
             await plugin.onMessage({ sock, m, db });
-            saveDB(db);
+            scheduleSave(); // ✅ debounce, bukan langsung save
           } catch (e) {
             console.log("Error onMessage:", e.message);
           }
@@ -219,7 +280,7 @@ async function startBot() {
 
     try {
       await plugin.execute({ sock, m, args, prefix, db });
-      saveDB(db);
+      scheduleSave(); // ✅ debounce, bukan langsung save
     } catch (e) {
       console.log("Error plugin [" + command + "]:", e.message);
       await m.reply("❌ Error: " + e.message);
@@ -228,60 +289,52 @@ async function startBot() {
 
   // ==================== PARTICIPANTS UPDATE ====================
   sock.ev.on("group-participants.update", async (data) => {
-    // Log debug — untuk deteksi apakah event masuk
     console.log("🔔 GROUP EVENT:", JSON.stringify(data));
 
     const { id, participants, action, author } = data;
 
-    // ✅ FIX: Tangkap @lid bot langsung dari event
-    // Cara: cek metadata grup, cari participant yang nomornya sama dengan bot
-    // lalu simpan id-nya (bisa @s.whatsapp.net atau @lid) sebagai db.botLid
-    // Ini lebih reliable dari p.lid karena langsung dari data event nyata
-    if (author) {
+    // ✅ FIX 3: Fetch metadata 1x saja, pakai untuk semua keperluan
+    // Sebelumnya ada const meta + const meta2 = 2x fetch metadata untuk grup yang sama
+    let meta = null;
+    try {
+      meta = await sock.groupMetadata(id);
+    } catch (_) {}
+
+    // Simpan bot ID dari metadata (1x fetch, dipakai semua pengecekan)
+    if (author && meta && !db.botLid) {
       const botPhone = sock.user.id.split('@')[0].split(':')[0];
-      // Cek apakah author event ini adalah bot via metadata
-      if (!db.botLid) {
-        try {
-          const meta = await sock.groupMetadata(id);
-          for (const p of meta.participants) {
-            const pPhone = p.id.split('@')[0].split(':')[0];
-            if (pPhone === botPhone) {
-              // Simpan semua kemungkinan ID bot
-              db.botPhone = botPhone;
-              db.botFullId = p.id; // ID resmi di metadata (@s.whatsapp.net)
-              if (p.lid) db.botLid = p.lid; // @lid jika ada
-              saveDB(db);
-              console.log("✅ Bot ID tersimpan:", db.botFullId, db.botLid || '(no lid)');
-              break;
-            }
-          }
-        } catch (_) {}
+      for (const p of meta.participants) {
+        const pPhone = p.id.split('@')[0].split(':')[0];
+        if (pPhone === botPhone) {
+          db.botPhone = botPhone;
+          db.botFullId = p.id;
+          if (p.lid) db.botLid = p.lid;
+          scheduleSave();
+          console.log("✅ Bot ID tersimpan:", db.botFullId, db.botLid || '(no lid)');
+          break;
+        }
       }
-      // ✅ FALLBACK: Cek sock.user.lid (tersedia di beberapa versi Baileys)
+
+      // Fallback: sock.user.lid
       if (!db.botLid && sock.user?.lid) {
         db.botLid = sock.user.lid;
-        saveDB(db);
+        scheduleSave();
         console.log("✅ Bot @lid dari sock.user:", db.botLid);
       }
-      // ✅ FALLBACK 2: Cek apakah author event ini adalah bot via perbandingan nomor
-      // Kalau author nomornya cocok dengan botPhone, berarti author adalah bot dalam format @lid
-      if (!db.botLid && author) {
-        try {
-          const meta2 = await sock.groupMetadata(id);
-          const botPhone2 = sock.user.id.split('@')[0].split(':')[0];
-          for (const p of meta2.participants) {
-            // Cari participant yang punya @lid = author dan nomor = botPhone
-            if (p.lid && p.lid === author) {
-              const pPhone = p.id.split('@')[0].split(':')[0];
-              if (pPhone === botPhone2) {
-                db.botLid = author; // author ini adalah bot dalam format @lid
-                saveDB(db);
-                console.log("✅ Bot @lid dari author event:", db.botLid);
-              }
-              break;
+
+      // Fallback: cari via p.lid === author (pakai meta yang sama, tidak fetch ulang)
+      if (!db.botLid && meta) {
+        for (const p of meta.participants) {
+          if (p.lid && p.lid === author) {
+            const pPhone = p.id.split('@')[0].split(':')[0];
+            if (pPhone === botPhone) {
+              db.botLid = author;
+              scheduleSave();
+              console.log("✅ Bot @lid dari author event:", db.botLid);
             }
+            break;
           }
-        } catch (_) {}
+        }
       }
     }
 
@@ -296,7 +349,7 @@ async function startBot() {
         sudahDipanggil.add(plugin);
         try {
           await plugin.onParticipantsUpdate({ sock, id, participants, action, author, db });
-          saveDB(db);
+          scheduleSave(); // ✅ debounce
         } catch (e) {
           console.log("Error onParticipantsUpdate [" + key + "]:", e.message);
         }
